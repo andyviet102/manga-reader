@@ -101,20 +101,22 @@ async function loadNext(){
 
 // Infinite scroll - load next chapter when near bottom
 const observer=new IntersectionObserver((entries)=>{
-  if(entries[0].isIntersecting&&!isLoading){loadNext();}
-},{rootMargin:'1000px'});
+  if(entries[0].isIntersecting&&!isLoading){loadNext().then(()=>loadNext());}
+},{rootMargin:'2000px'});
 observer.observe(document.getElementById('loadingIndicator'));
 
-// Update current chapter indicator
+// Also trigger on scroll
 window.addEventListener('scroll',()=>{
   const dividers=document.querySelectorAll('.chapter-divider');
   let current='';
   dividers.forEach(d=>{if(d.getBoundingClientRect().top<window.innerHeight/2)current=d.textContent;});
   info.textContent=current;
+  // Load more if near bottom
+  if(document.documentElement.scrollHeight-window.scrollY-window.innerHeight<3000&&!isLoading){loadNext();}
 });
 
-// Load first 2 chapters immediately
-loadNext().then(()=>loadNext());
+// Load first 3 chapters immediately
+loadNext().then(()=>loadNext()).then(()=>loadNext());
 
 // Restore last position
 const lastCh=localStorage.getItem('lastChapter');
