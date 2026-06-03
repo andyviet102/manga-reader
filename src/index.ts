@@ -7,16 +7,9 @@ const data: { title: string; chapters: { name: string; pages: string[] }[] } = r
 
 const app = new Hono()
 
-// API trả pages theo chapter index (lazy load từng chương khi scroll tới)
-app.get('/api/chapter/:index', (c) => {
-  const idx = parseInt(c.req.param('index'))
-  const chapter = data.chapters[idx]
-  if (!chapter) return c.json({ error: 'not found' }, 404)
-  return c.json(chapter)
-})
-
 app.get('/', (c) => {
-  const chapterNames = JSON.stringify(data.chapters.map(c => c.name))
+  const allPages = JSON.stringify(data.chapters.map(c => c.pages))
+  const names = JSON.stringify(data.chapters.map(c => c.name))
   return c.html(`<!DOCTYPE html><html><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${data.title}</title>
@@ -28,10 +21,9 @@ h1{font-size:16px;white-space:nowrap}
 select{padding:6px 10px;border-radius:6px;border:1px solid #333;background:#0f3460;color:#fff;font-size:13px}
 .search{padding:6px 10px;border-radius:6px;border:1px solid #333;background:#0f3460;color:#fff;font-size:13px;width:100px}
 #reader{display:flex;flex-direction:column;align-items:center}
-.chapter-divider{padding:12px;color:#e94560;font-weight:bold;font-size:14px;text-align:center;background:#16213e;width:100%;max-width:800px;margin:4px 0}
+.ch-div{padding:12px;color:#e94560;font-weight:bold;font-size:14px;text-align:center;background:#16213e;width:100%;max-width:800px;margin:4px 0}
 img{display:block;width:100%;max-width:800px;height:auto}
-.loading{color:#666;padding:20px;text-align:center}
-.page-info{position:fixed;bottom:16px;right:16px;background:rgba(0,0,0,.8);color:#fff;padding:6px 12px;border-radius:4px;font-size:12px;z-index:99}
+.info{position:fixed;bottom:16px;right:16px;background:rgba(0,0,0,.8);color:#fff;padding:6px 12px;border-radius:4px;font-size:12px;z-index:99}
 </style></head><body>
 <header>
 <h1>${data.title}</h1>
@@ -39,96 +31,59 @@ img{display:block;width:100%;max-width:800px;height:auto}
 <select id="jumpTo"><option value="">-- Nhảy tới --</option></select>
 </header>
 <div id="reader"></div>
-<div class="loading" id="loadingIndicator">Đang tải...</div>
-<div class="page-info" id="info"></div>
+<div class="info" id="info"></div>
 <script>
-const names=${chapterNames};
-const total=names.length;
+const P=${allPages};
+const N=${names};
+const T=P.length;
 const reader=document.getElementById('reader');
 const info=document.getElementById('info');
-const jumpTo=document.getElementById('jumpTo');
+const jump=document.getElementById('jumpTo');
 const search=document.getElementById('search');
 let loaded=0;
-let isLoading=false;
 
-// Populate jump dropdown
-names.forEach((n,i)=>{const o=document.createElement('option');o.value=i;o.textContent=n;jumpTo.appendChild(o);});
+N.forEach((n,i)=>{const o=document.createElement('option');o.value=i;o.textContent=n;jump.appendChild(o);});
+const opts=[...jump.options];
+search.oninput=function(){const q=this.value.toLowerCase();opts.forEach((o,i)=>{if(i===0)return;o.hidden=!o.textContent.toLowerCase().includes(q);});};
 
-search.oninput=function(){
-  const q=this.value.toLowerCase();
-  [...jumpTo.options].forEach((o,i)=>{if(i===0)return;o.style.display=o.textContent.toLowerCase().includes(q)?'':'none';});
+jump.onchange=function(){
+  const idx=+this.value;if(isNaN(idx))return;
+  while(loaded<=idx)loadNext();
+  document.getElementById('c'+idx).scrollIntoView({behavior:'smooth'});
 };
 
-jumpTo.onchange=function(){
-  const idx=+this.value;
-  if(isNaN(idx))return;
-  const div=document.getElementById('ch-'+idx);
-  if(div){div.scrollIntoView({behavior:'smooth'});return;}
-  // Need to load up to that chapter
-  loadUpTo(idx);
-};
-
-async function loadUpTo(targetIdx){
-  while(loaded<=targetIdx&&loaded<total){await loadNext();}
-  setTimeout(()=>{const div=document.getElementById('ch-'+targetIdx);if(div)div.scrollIntoView({behavior:'smooth'});},100);
-}
-
-async function loadNext(){
-  if(loaded>=total||isLoading)return;
-  isLoading=true;
-  const idx=loaded;
-  const res=await fetch('/api/chapter/'+idx);
-  const ch=await res.json();
-  
-  const divider=document.createElement('div');
-  divider.className='chapter-divider';
-  divider.id='ch-'+idx;
-  divider.textContent='── '+ch.name+' ──';
-  reader.appendChild(divider);
-  
-  ch.pages.forEach((id,i)=>{
+function loadNext(){
+  if(loaded>=T)return;
+  const i=loaded;
+  const d=document.createElement('div');d.className='ch-div';d.id='c'+i;d.textContent='── '+N[i]+' ──';
+  reader.appendChild(d);
+  P[i].forEach((id,j)=>{
     const img=document.createElement('img');
     img.src='https://lh3.googleusercontent.com/d/'+id;
-    img.loading=i<3&&idx<2?'eager':'lazy';
-    img.alt=ch.name+' - Page '+(i+1);
+    img.loading=(i<2&&j<3)?'eager':'lazy';
     reader.appendChild(img);
   });
-  
   loaded++;
-  isLoading=false;
-  if(loaded>=total)document.getElementById('loadingIndicator').style.display='none';
 }
 
-// Infinite scroll - load next chapter when near bottom
-const observer=new IntersectionObserver((entries)=>{
-  if(entries[0].isIntersecting&&!isLoading){loadNext().then(()=>loadNext());}
-},{rootMargin:'2000px'});
-observer.observe(document.getElementById('loadingIndicator'));
+// Load first 3 chapters
+loadNext();loadNext();loadNext();
 
-// Also trigger on scroll
+// Infinite scroll
 window.addEventListener('scroll',()=>{
-  const dividers=document.querySelectorAll('.chapter-divider');
-  let current='';
-  dividers.forEach(d=>{if(d.getBoundingClientRect().top<window.innerHeight/2)current=d.textContent;});
-  info.textContent=current;
-  // Load more if near bottom
-  if(document.documentElement.scrollHeight-window.scrollY-window.innerHeight<3000&&!isLoading){loadNext();}
+  if(document.documentElement.scrollHeight-window.scrollY-window.innerHeight<3000){loadNext();loadNext();}
+  const divs=document.querySelectorAll('.ch-div');
+  let cur='';divs.forEach(d=>{if(d.getBoundingClientRect().top<window.innerHeight/2)cur=d.textContent;});
+  info.textContent=cur;
 });
 
-// Load first 3 chapters immediately
-loadNext().then(()=>loadNext()).then(()=>loadNext());
+// Keyboard
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){loadNext();loadNext();}});
 
-// Restore last position
-const lastCh=localStorage.getItem('lastChapter');
-if(lastCh&&+lastCh>1)loadUpTo(+lastCh);
-
-// Save position periodically
-setInterval(()=>{
-  const dividers=document.querySelectorAll('.chapter-divider');
-  let idx=0;
-  dividers.forEach((d,i)=>{if(d.getBoundingClientRect().top<window.innerHeight/2)idx=i;});
-  localStorage.setItem('lastChapter',idx);
-},3000);
+// Restore
+const last=localStorage.getItem('lc');
+if(last&&+last>2){let t=+last;while(loaded<=t)loadNext();setTimeout(()=>{document.getElementById('c'+t).scrollIntoView();},100);}
+setInterval(()=>{const divs=document.querySelectorAll('.ch-div');let idx=0;divs.forEach((d,i)=>{if(d.getBoundingClientRect().top<window.innerHeight/2)idx=i;});localStorage.setItem('lc',idx);},3000);
 </script></body></html>`)
 })
 
