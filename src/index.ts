@@ -69,6 +69,10 @@ function loadNext(){
 // Load first 3 chapters
 loadNext();loadNext();loadNext();
 
+// Restore last position
+const last=localStorage.getItem('lc');
+if(last&&+last>2){let t=Math.min(+last,T-1);while(loaded<=t)loadNext();setTimeout(()=>{const el=document.getElementById('c'+t);if(el)el.scrollIntoView();},200);}
+
 // Infinite scroll + interval backup
 function checkLoad(){
   if(loaded>=T)return;
