@@ -22,7 +22,7 @@ select{padding:6px 10px;border-radius:6px;border:1px solid #333;background:#0f34
 .search{padding:6px 10px;border-radius:6px;border:1px solid #333;background:#0f3460;color:#fff;font-size:13px;width:100px}
 #reader{display:flex;flex-direction:column;align-items:center}
 .ch-div{padding:12px;color:#e94560;font-weight:bold;font-size:14px;text-align:center;background:#16213e;width:100%;max-width:800px;margin:4px 0}
-img{display:block;width:100%;max-width:800px;height:auto}
+img{display:block;width:100%;max-width:800px;height:auto;min-height:200px;background:#111}
 .info{position:fixed;bottom:16px;right:16px;background:rgba(0,0,0,.8);color:#fff;padding:6px 12px;border-radius:4px;font-size:12px;z-index:99}
 </style></head><body>
 <header>
@@ -69,21 +69,25 @@ function loadNext(){
 // Load first 3 chapters
 loadNext();loadNext();loadNext();
 
-// Infinite scroll
-window.addEventListener('scroll',()=>{
-  if(document.documentElement.scrollHeight-window.scrollY-window.innerHeight<3000){loadNext();loadNext();}
+// Infinite scroll + interval backup
+function checkLoad(){
+  if(loaded>=T)return;
+  const sh=document.documentElement.scrollHeight;
+  const sy=window.scrollY||window.pageYOffset;
+  const wh=window.innerHeight;
+  if(sh-sy-wh<3000){loadNext();loadNext();}
+}
+window.addEventListener('scroll',checkLoad);
+setInterval(checkLoad,500);
+
+// Update chapter indicator
+setInterval(()=>{
   const divs=document.querySelectorAll('.ch-div');
-  let cur='';divs.forEach(d=>{if(d.getBoundingClientRect().top<window.innerHeight/2)cur=d.textContent;});
+  let cur='',idx=0;
+  divs.forEach((d,i)=>{if(d.getBoundingClientRect().top<window.innerHeight/2){cur=d.textContent;idx=i;}});
   info.textContent=cur;
-});
-
-// Keyboard
-document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){loadNext();loadNext();}});
-
-// Restore
-const last=localStorage.getItem('lc');
-if(last&&+last>2){let t=+last;while(loaded<=t)loadNext();setTimeout(()=>{document.getElementById('c'+t).scrollIntoView();},100);}
-setInterval(()=>{const divs=document.querySelectorAll('.ch-div');let idx=0;divs.forEach((d,i)=>{if(d.getBoundingClientRect().top<window.innerHeight/2)idx=i;});localStorage.setItem('lc',idx);},3000);
+  localStorage.setItem('lc',idx);
+},1000);
 </script></body></html>`)
 })
 
